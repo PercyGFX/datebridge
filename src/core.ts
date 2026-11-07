@@ -24,7 +24,9 @@ export type PlainDateInput = Temporal.PlainDate | Date | string | { year: number
 
 const DATE_ONLY = /^[+-]?\d{4,6}-\d{2}-\d{2}$/;
 const LOCAL_DATE_TIME = /^[+-]?\d{4,6}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
-const UTC_MIDNIGHT = /^([+-]?\d{4,6}-\d{2}-\d{2})T00:00(:00(\.0+)?)?Z$/;
+// Exactly midnight, with "Z" or any offset: "2026-11-07T00:00:00Z", "...T00:00:00+00:00" (Go),
+// "...T00:00:00+05:30". Whoever wrote it meant the date written in it.
+const MIDNIGHT = /^([+-]?\d{4,6}-\d{2}-\d{2})T00:00(?::00(?:\.0+)?)?(?:Z|[+-]\d{2}:?\d{2})$/i;
 
 /**
  * Converts a value to a `Temporal.Instant` (an exact moment, like "bet placed at").
@@ -88,8 +90,9 @@ function parseInstant(input: string): Temporal.Instant {
  * birthday or "promo ends Nov 30"). It can't shift to the day before or after.
  *
  * - `"2026-11-07"`, `{ year, month, day }` and PlainDate are read as-is.
- * - A Date or ISO string at exactly **UTC** midnight (what Prisma and many APIs return for
- *   date columns) gives that UTC day.
+ * - An ISO string at exactly midnight, with "Z" or any offset, gives the date written in it.
+ *   This is how Prisma, Go and many APIs send date columns.
+ * - A Date at exactly **UTC** midnight (what Prisma returns for date columns) gives that UTC day.
  * - A Date at exactly **local** midnight (what most date pickers return) gives that local day.
  * - Anything with a real time of day throws, because its day depends on the timezone.
  *   Use {@link plainDateIn} for that.
@@ -114,8 +117,8 @@ export function plainDate(value: PlainDateInput): Temporal.PlainDate {
 function parsePlainDate(input: string): Temporal.PlainDate {
   const text = input.trim();
   const T = getTemporal();
-  const utcMidnight = UTC_MIDNIGHT.exec(text);
-  const dateText = utcMidnight ? utcMidnight[1]! : text;
+  const midnight = MIDNIGHT.exec(text);
+  const dateText = midnight ? midnight[1]! : text;
   const fromPostgres = (value: string) => {
     try {
       const pg = parsePgDate(value); // "0044-03-15 BC", "10000-01-01"

@@ -31,7 +31,8 @@ export function zInstant() {
 /**
  * A "YYYY-MM-DD" string <-> `Temporal.PlainDate`.
  * Rejects timestamps like "2026-11-06T18:30:00Z", which is how most day-shift bugs arrive.
- * Exact UTC midnight ("2026-11-07T00:00:00.000Z") is accepted, so older clients keep working.
+ * Exact midnight ("2026-11-07T00:00:00.000Z", "...T00:00:00+00:00") is accepted, so older
+ * clients and Go backends keep working.
  */
 export function zPlainDate() {
   return z.codec(z.string(), z.custom<Temporal.PlainDate>(isPlainDate, { message: "Expected a Temporal.PlainDate" }), {

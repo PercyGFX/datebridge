@@ -186,6 +186,20 @@ db.select().from(bets).where(and(gte(bets.placedAt, start), lt(bets.placedAt, en
 5. **Run servers with `TZ=UTC`.**
 6. **Use server time for anything that matters** (expiry, bonus windows). Client clocks can be wrong.
 
+## Backends in other languages (Go, Python, Java...)
+
+You only need datebridge on the frontend. The contract is two string formats, which every
+language can read and write:
+
+| Value | Send as | Go type |
+|---|---|---|
+| Exact moment | `"2026-11-07T14:30:00Z"` | `time.Time` (its JSON is already this format) |
+| Calendar date | `"2026-11-07"` | `civil.Date` from `cloud.google.com/go/civil`, or `string` |
+
+Don't use `time.Time` for date-only fields: Go can't read `"2026-11-07"` into it. If a backend
+sends dates as midnight timestamps (`"2026-11-07T00:00:00Z"` or `"...T00:00:00+00:00"`),
+`plainDate()` and the validators still read them as the right day.
+
 ## API
 
 From `datebridge`:

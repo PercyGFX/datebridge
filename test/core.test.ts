@@ -70,6 +70,15 @@ describe(`plainDate() [TZ=${TZ}]`, () => {
     expect(plainDate(new Date(Date.UTC(2026, 10, 7))).toString()).toBe("2026-11-07");
   });
 
+  it("accepts midnight at any offset (Go's time.Time JSON for date columns)", () => {
+    expect(plainDate("2026-11-07T00:00:00+00:00").toString()).toBe("2026-11-07");
+    expect(plainDate("2026-11-07T00:00:00+05:30").toString()).toBe("2026-11-07");
+    expect(plainDate("2026-11-07T00:00:00-05:00").toString()).toBe("2026-11-07");
+    // Not midnight: still refused, because its day depends on the timezone.
+    expect(() => plainDate("2026-11-07T00:00:00.001Z")).toThrow(/timestamp/);
+    expect(() => plainDate("2026-11-06T18:30:00+00:00")).toThrow(/timestamp/);
+  });
+
   it("reads a date picker's local-midnight Date as the day the user picked, in every timezone", () => {
     expect(plainDate(new Date(2026, 10, 7)).toString()).toBe("2026-11-07");
     expect(plainDate(new Date(2026, 0, 1)).toString()).toBe("2026-01-01");
