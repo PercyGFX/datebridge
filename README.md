@@ -66,7 +66,11 @@ const placedAt = instant(json.placedAt);   // "2026-11-07T14:30:00Z" -> Instant
 const gameDay = plainDate(json.gameDay);   // "2026-11-07" -> PlainDate
 ```
 
-Or validate whole payloads with **zod 4**:
+## Validation: zod, Joi, Yup
+
+Validate whole payloads and get Temporal values out.
+
+**zod 4**
 
 ```ts
 import { z } from "zod";
@@ -78,7 +82,37 @@ const bet = Bet.parse(body);        // strings -> Temporal
 const json = z.encode(Bet, bet);    // Temporal -> strings
 ```
 
-Both reject the values behind day-shift bugs, with a message that says what went wrong:
+**Joi 17+**
+
+```ts
+import BaseJoi from "joi";
+import { extendJoi } from "datebridge/joi";
+
+const Joi = extendJoi(BaseJoi);   // adds Joi.instant() and Joi.plainDate()
+
+const Bet = Joi.object({
+  placedAt: Joi.instant().required(),
+  gameDay: Joi.plainDate().required(),
+});
+const { value, error } = Bet.validate(req.body);
+```
+
+In plain JavaScript you can also use `BaseJoi.extend(...joiTemporal)`.
+
+**Yup 1**
+
+```ts
+import { object } from "yup";
+import { yupInstant, yupPlainDate } from "datebridge/yup";
+
+const Bet = object({
+  placedAt: yupInstant().required(),
+  gameDay: yupPlainDate().required(),
+});
+const bet = await Bet.validate(form);   // types are inferred: bet.placedAt is Temporal.Instant
+```
+
+All three reject the values behind day-shift bugs, with a message that says what went wrong:
 
 ```
 "2026-11-06T18:30:00.000Z" is a timestamp, not a calendar date. Which day it falls on
@@ -176,6 +210,8 @@ From `datebridge`:
 From `datebridge/pg`: `useTemporalTypes`, `createTemporalTypes`, `toPg`, `parse`, `formatForPostgres`, `PG_TYPES`.
 From `datebridge/drizzle`: `instantColumn`, `plainDateColumn`.
 From `datebridge/zod`: `zInstant`, `zPlainDate`.
+From `datebridge/joi`: `extendJoi`, `joiTemporal`.
+From `datebridge/yup`: `yupInstant`, `yupPlainDate`.
 
 Errors are thrown as `DateBridgeError`, with a message that says how to fix the problem.
 
@@ -191,7 +227,8 @@ New York (daylight saving).
 
 ## Roadmap
 
-Prisma (once Prisma 8 is stable), mysql2, postgres.js, TypeORM, Sequelize, MikroORM, Mongoose.
+Prisma (once Prisma 8 is stable), NestJS (class-validator), Valibot, mysql2, postgres.js, TypeORM,
+Sequelize, MikroORM, Mongoose.
 
 ## License
 
