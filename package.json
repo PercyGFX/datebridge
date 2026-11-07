@@ -1,0 +1,91 @@
+{
+  "name": "datebridge",
+  "version": "0.1.0",
+  "description": "Save, send and show dates correctly across frontend, backend and database. Built on Temporal.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PercyGFX/datebridge.git"
+  },
+  "homepage": "https://github.com/PercyGFX/datebridge#readme",
+  "bugs": "https://github.com/PercyGFX/datebridge/issues",
+  "keywords": [
+    "date",
+    "time",
+    "timezone",
+    "temporal",
+    "postgres",
+    "pg",
+    "drizzle",
+    "zod",
+    "fullstack"
+  ],
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./pg": {
+      "types": "./dist/pg.d.ts",
+      "default": "./dist/pg.js"
+    },
+    "./drizzle": {
+      "types": "./dist/drizzle.d.ts",
+      "default": "./dist/drizzle.js"
+    },
+    "./zod": {
+      "types": "./dist/zod.d.ts",
+      "default": "./dist/zod.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "build": "node scripts/clean.js && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:timezones": "node scripts/test-timezones.js",
+    "lint:package": "publint && attw --pack . --profile esm-only",
+    "check": "npm run typecheck && npm run test:timezones && npm run build && npm run lint:package",
+    "prepublishOnly": "npm run check"
+  },
+  "dependencies": {
+    "temporal-spec": "^1.0.1"
+  },
+  "peerDependencies": {
+    "drizzle-orm": ">=0.40.0",
+    "zod": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "drizzle-orm": {
+      "optional": true
+    },
+    "zod": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@electric-sql/pglite": "^0.5.15",
+    "@electric-sql/pglite-socket": "^0.2.18",
+    "@types/node": "^24.19.2",
+    "@types/pg": "^8.23.1",
+    "drizzle-orm": "^0.45.4",
+    "pg": "^8.23.1",
+    "publint": "^0.3.25",
+    "temporal-polyfill": "^1.0.8",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0",
+    "zod": "^4.6.7"
+  }
+}
