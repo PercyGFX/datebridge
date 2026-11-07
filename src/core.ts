@@ -6,21 +6,81 @@ import {
   isDate,
   isInstant,
   isPlainDate,
+  isPlainDateTime,
   isZonedDateTime,
   type Temporal,
 } from "./runtime.js";
 
 /**
- * Anything that means one exact moment: a Temporal.Instant or ZonedDateTime, a Date,
- * epoch milliseconds, or an ISO string with "Z" or an offset.
+ * Values from date libraries and date-picker components: Dayjs and Moment (`toDate()`),
+ * Luxon (`toJSDate()`). MUI and Ant Design pickers give you these.
  */
-export type InstantInput = Temporal.Instant | Temporal.ZonedDateTime | Date | string | number;
+export type DateLibraryValue = { toDate(): Date } | { toJSDate(): Date };
+
+/**
+ * Anything that means one exact moment: a Temporal.Instant or ZonedDateTime, a Date,
+ * a Dayjs/Moment/Luxon value, epoch milliseconds, or an ISO string with "Z" or an offset.
+ */
+export type InstantInput = Temporal.Instant | Temporal.ZonedDateTime | Date | DateLibraryValue | string | number;
 
 /**
  * Anything that means one calendar day: a Temporal.PlainDate, a "YYYY-MM-DD" string,
- * `{ year, month, day }`, or a Date at exactly midnight (see {@link plainDate}).
+ * `{ year, month, day }`, a Dayjs/Moment/Luxon value, or a Date at exactly midnight
+ * (see {@link plainDate}).
  */
-export type PlainDateInput = Temporal.PlainDate | Date | string | { year: number; month: number; day: number };
+export type PlainDateInput =
+  | Temporal.PlainDate
+  | Date
+  | DateLibraryValue
+  | string
+  | { year: number; month: number; day: number };
+
+/**
+ * A value from React Aria based pickers, such as HeroUI (formerly NextUI) and React Spectrum:
+ * `CalendarDate`, `CalendarDateTime` or `ZonedDateTime` from `@internationalized/date`.
+ */
+export interface CalendarLibraryValue {
+  calendar: { identifier: string };
+  year: number;
+  month: number;
+  day: number;
+  toString(): string;
+}
+
+/** @internal */
+export function isCalendarLibraryValue(value: unknown): value is CalendarLibraryValue & { hour?: number; timeZone?: string } {
+  if (value === null || typeof value !== "object") return false;
+  const v = value as { calendar?: { identifier?: unknown }; year?: unknown; day?: unknown };
+  return typeof v.calendar?.identifier === "string" && typeof v.year === "number" && typeof v.day === "number";
+}
+
+// Their toString() is always ISO 8601 in the Gregorian calendar, even when `year` is in
+// another calendar (e.g. 2569 in the Buddhist calendar), so it's the safe way to read them.
+const isoDatePart = (text: string) => /^[+-]?\d{4,6}-\d{2}-\d{2}/.exec(text)?.[0];
+
+/** Dayjs/Moment (`toDate`) and Luxon (`toJSDate`) values -> Date. */
+function libraryToDate(value: unknown): Date | undefined {
+  if (value === null || typeof value !== "object") return undefined;
+  const v = value as { toDate?: () => unknown; toJSDate?: () => unknown };
+  const date = typeof v.toJSDate === "function" ? v.toJSDate() : typeof v.toDate === "function" ? v.toDate() : undefined;
+  return isDate(date) ? date : undefined;
+}
+
+/**
+ * The calendar date an object shows, for objects that know their own timezone:
+ * `{ year, month, day }` and Luxon (number fields), Dayjs and Moment (methods).
+ */
+function calendarParts(value: object): { year: number; month: number; day: number } | undefined {
+  const v = value as Record<string, unknown>;
+  if (typeof v.year === "number" && typeof v.month === "number" && typeof v.day === "number") {
+    return { year: v.year, month: v.month, day: v.day };
+  }
+  if (typeof v.year === "function" && typeof v.month === "function" && typeof v.date === "function") {
+    const call = (key: string) => (v[key] as () => number).call(value);
+    return { year: call("year"), month: call("month") + 1, day: call("date") }; // month() is 0-based
+  }
+  return undefined;
+}
 
 const DATE_ONLY = /^[+-]?\d{4,6}-\d{2}-\d{2}$/;
 const LOCAL_DATE_TIME = /^[+-]?\d{4,6}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
@@ -50,6 +110,19 @@ export function instant(value: InstantInput): Temporal.Instant {
     return T.Instant.fromEpochMilliseconds(value);
   }
   if (typeof value === "string") return parseInstant(value);
+  if (isCalendarLibraryValue(value)) {
+    const text = value.toString();
+    if (typeof value.timeZone === "string") return T.ZonedDateTime.from(text).toInstant();
+    if (typeof value.hour === "number") {
+      throw new DateBridgeError(
+        `${JSON.stringify(text)} (CalendarDateTime) has no timezone, so it doesn't name one exact moment. ` +
+          "Use fromDateTimeInput(value, timeZone), or give the picker a ZonedDateTime value.",
+      );
+    }
+    throw new DateBridgeError(`${JSON.stringify(text)} is a calendar date, not an exact moment. Use plainDate(value) instead.`);
+  }
+  const fromLibrary = libraryToDate(value);
+  if (fromLibrary) return instant(fromLibrary);
   throw new DateBridgeError(
     `Expected an exact moment (Temporal.Instant, Date, ISO string or epoch milliseconds), got ${describe(value)}.`,
   );
@@ -94,7 +167,9 @@ function parseInstant(input: string): Temporal.Instant {
  *   This is how Prisma, Go and many APIs send date columns.
  * - A Date at exactly **UTC** midnight (what Prisma returns for date columns) gives that UTC day.
  * - A Date at exactly **local** midnight (what most date pickers return) gives that local day.
- * - Anything with a real time of day throws, because its day depends on the timezone.
+ * - Dayjs, Moment, Luxon and React Aria / HeroUI values give the date they show, in their
+ *   own timezone and calendar.
+ * - Anything else with a real time of day throws, because its day depends on the timezone.
  *   Use {@link plainDateIn} for that.
  */
 export function plainDate(value: PlainDateInput): Temporal.PlainDate {
@@ -102,12 +177,25 @@ export function plainDate(value: PlainDateInput): Temporal.PlainDate {
   if (isPlainDate(value)) return value;
   if (typeof value === "string") return parsePlainDate(value);
   if (isDate(value)) return plainDateFromMidnight(value);
-  if (value !== null && typeof value === "object" && "year" in value && "month" in value && "day" in value) {
-    try {
-      return T.PlainDate.from({ year: value.year, month: value.month, day: value.day }, { overflow: "reject" });
-    } catch {
-      throw new DateBridgeError(`${value.year}-${value.month}-${value.day} is not a real calendar date.`);
+  if (isPlainDateTime(value) || isZonedDateTime(value)) return value.toPlainDate();
+  if (isCalendarLibraryValue(value)) {
+    const date = isoDatePart(value.toString());
+    if (date) return parsePlainDate(date);
+  }
+  if (value !== null && typeof value === "object") {
+    const parts = calendarParts(value);
+    if (parts) {
+      if ([parts.year, parts.month, parts.day].some(Number.isNaN)) {
+        throw new DateBridgeError("Cannot convert an invalid date to a calendar date.");
+      }
+      try {
+        return T.PlainDate.from(parts, { overflow: "reject" });
+      } catch {
+        throw new DateBridgeError(`${parts.year}-${parts.month}-${parts.day} is not a real calendar date.`);
+      }
     }
+    const fromLibrary = libraryToDate(value);
+    if (fromLibrary) return plainDateFromMidnight(fromLibrary);
   }
   throw new DateBridgeError(
     `Expected a calendar date (Temporal.PlainDate, "YYYY-MM-DD" or { year, month, day }), got ${describe(value)}.`,

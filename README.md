@@ -1,5 +1,10 @@
 # datebridge
 
+[![npm version](https://img.shields.io/npm/v/datebridge.svg)](https://www.npmjs.com/package/datebridge)
+[![npm downloads](https://img.shields.io/npm/dm/datebridge.svg)](https://www.npmjs.com/package/datebridge)
+[![types](https://img.shields.io/npm/types/datebridge.svg)](https://www.npmjs.com/package/datebridge)
+[![license](https://img.shields.io/npm/l/datebridge.svg)](https://github.com/PercyGFX/datebridge/blob/main/LICENSE)
+
 Save, send and show dates correctly across your frontend, backend and database.
 
 Most date bugs are not date-math bugs. They happen when a date moves between layers:
@@ -21,9 +26,15 @@ and only converted to a timezone when you show them.
 ## Install
 
 ```sh
-npm install datebridge
-npm install temporal-polyfill   # needed for Safari and Node.js below 26
+npm install datebridge temporal-polyfill
+# or
+pnpm add datebridge temporal-polyfill
+yarn add datebridge temporal-polyfill
+bun add datebridge temporal-polyfill
 ```
+
+`temporal-polyfill` is needed for Safari and Node.js below 26. datebridge itself has no runtime
+dependencies; it installs one small package of TypeScript types (`temporal-spec`).
 
 Load the polyfill once, at the top of your app. It uses built-in Temporal where it exists
 (Chrome, Edge, Firefox, Node 26+):
@@ -54,6 +65,50 @@ input.value = toDateInput(promo.endsOn);
 
 For `<input type="datetime-local">`, use `fromDateTimeInput(value, timeZone?)` and
 `toDateTimeInput(instant, timeZone?)`.
+
+## Date pickers
+
+Pass the picker's value straight in. Use `plainDate()` for date-only fields (birthday, draw day)
+and `instant()` for date + time fields (draw at, expires at).
+
+| Picker | It gives you | Date only | Date + time |
+|---|---|---|---|
+| `<input type="date">` / `datetime-local` | string | `fromDateInput(e.target.value)` | `fromDateTimeInput(e.target.value)` |
+| shadcn/ui Calendar, react-day-picker | `Date` | `plainDate(date)` | see below |
+| react-datepicker | `Date` | `plainDate(date)` | `instant(date)` |
+| MUI X (Dayjs, Luxon, Moment or date-fns adapter) | Dayjs / Luxon / Moment / `Date` | `plainDate(value)` | `instant(value)` |
+| Ant Design | Dayjs | `plainDate(value)` | `instant(value)` |
+| HeroUI (NextUI), React Aria | `CalendarDate` / `CalendarDateTime` / `ZonedDateTime` | `plainDate(value)` | `fromDateTimeInput(value)`, or `instant(value)` for `ZonedDateTime` |
+| Anything else | | `plainDate("YYYY-MM-DD")` | `instant(date)` or an ISO string with `Z` |
+
+```ts
+import { plainDate, instant } from "datebridge";
+
+const drawDay = plainDate(pickerValue);   // Temporal.PlainDate: the day the user saw
+const drawAt = instant(pickerValue);      // Temporal.Instant: the exact moment
+await fetch("/api/draws", { method: "POST", body: JSON.stringify({ drawDay, drawAt }) });
+```
+
+A date-only picker that hands back a `Date` with a time of day (some keep the previous time)
+throws instead of guessing. Use `plainDateIn(date, userTimeZone())` if that's expected.
+
+**shadcn/ui has no time picker.** Pair its Calendar with `<input type="time">`:
+
+```ts
+const drawAt = fromDateTimeInput(`${toDateInput(plainDate(day))}T${time}`); // time = "20:00"
+```
+
+**Setting the picker's value from saved data:**
+
+| Picker | Date only | Date + time |
+|---|---|---|
+| `Date`-based (shadcn, react-day-picker, react-datepicker) | `toPickerDate(drawDay)` | `toDate(drawAt)` |
+| Dayjs-based (MUI, Ant Design) | `dayjs(drawDay.toString())` | `dayjs(toDate(drawAt))` |
+| HeroUI, React Aria | `parseDate(drawDay.toString())` | `parseAbsoluteToLocal(drawAt.toString())` |
+
+Don't use `new Date("2026-11-07")` to set a date picker: it gives UTC midnight, which shows as
+the previous day for users west of UTC. `toPickerDate()` gives the start of the day in the
+user's timezone.
 
 ## Sending dates over the API
 
@@ -206,8 +261,8 @@ From `datebridge`:
 
 | Function | What it does |
 |---|---|
-| `instant(value)` | ISO string with Z/offset, `Date`, epoch ms, ZonedDateTime → `Instant` |
-| `plainDate(value)` | `"YYYY-MM-DD"`, `{ year, month, day }`, midnight `Date` → `PlainDate` |
+| `instant(value)` | ISO string with Z/offset, `Date`, epoch ms, ZonedDateTime, picker values → `Instant` |
+| `plainDate(value)` | `"YYYY-MM-DD"`, `{ year, month, day }`, midnight `Date`, picker values → `PlainDate` |
 | `plainDateIn(value, timeZone)` | The day a moment falls on in a timezone |
 | `dayRange(date, timeZone)` | `{ start, end }` instants of a day in a timezone |
 | `now()`, `today(timeZone?)`, `userTimeZone()` | Current moment, date and timezone |
@@ -216,7 +271,8 @@ From `datebridge`:
 | `formatRelative(value, options?)` | "5 minutes ago", "tomorrow" |
 | `inTimeZone(value, timeZone?)` | `ZonedDateTime` for custom formatting |
 | `fromDateInput`, `toDateInput` | `<input type="date">` ↔ `PlainDate` |
-| `fromDateTimeInput`, `toDateTimeInput` | `<input type="datetime-local">` ↔ `Instant` |
+| `fromDateTimeInput`, `toDateTimeInput` | `<input type="datetime-local">` or `CalendarDateTime` ↔ `Instant` |
+| `toPickerDate(date)` | `PlainDate` → the `Date` a date picker expects (start of the user's day) |
 | `toDate(value)` | `Instant` → legacy `Date`, for libraries that need one |
 | `isInstant`, `isPlainDate`, ... | Type guards |
 | `configure({ Temporal })` | Use a polyfill that isn't installed globally |

@@ -2,34 +2,40 @@
 //
 //   const Bet = object({ placedAt: yupInstant().required(), gameDay: yupPlainDate().required() });
 //   const bet = await Bet.validate(form); // bet.placedAt is a Temporal.Instant
+//
+// Yup is mostly used for forms, so besides strings these accept what date pickers give you:
+// Date objects and Dayjs/Moment/Luxon values.
 
 import { mixed } from "yup";
-import { instant, plainDate } from "./core.js";
+import { instant, plainDate, type InstantInput, type PlainDateInput } from "./core.js";
 import { isInstant, isPlainDate, type Temporal } from "./runtime.js";
 
 const reason = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+// Strings, Dates and date-library objects. Numbers and booleans are never dates in a form.
+const convertible = (value: unknown) => typeof value === "string" || (typeof value === "object" && value !== null);
 
 // `T extends {}` matches Yup's own constraint on mixed<T> (any non-null value).
 function temporalSchema<T extends {}>(
   name: string,
   is: (value: unknown) => value is T,
-  parse: (value: string) => T,
+  parse: (value: unknown) => T,
   expected: string,
 ) {
   // No type guard on mixed(): a failed conversion should reach the test below, so the
   // error explains what's wrong instead of Yup's generic "must be a `mixed` type".
   return mixed<T>()
     .transform((value: unknown) => {
-      if (typeof value !== "string") return value;
+      if (is(value) || !convertible(value)) return value;
       try {
         return parse(value);
       } catch {
-        return value; // left as a string; the test reports why
+        return value; // left as-is; the test reports why
       }
     })
     .test(name, (value: unknown, ctx) => {
       if (value === null || value === undefined || is(value)) return true; // .required()/.nullable() decide
-      if (typeof value !== "string") return ctx.createError({ message: `\${path} must be ${expected}` });
+      if (!convertible(value)) return ctx.createError({ message: `\${path} must be ${expected}` });
       try {
         parse(value);
         // Only reachable in strict mode, which skips transforms.
@@ -42,17 +48,28 @@ function temporalSchema<T extends {}>(
 }
 
 /**
- * An ISO 8601 string with "Z" or an offset -> `Temporal.Instant`.
- * Rejects strings without a timezone, like "2026-11-07T14:30".
+ * An ISO 8601 string with "Z" or an offset, a Date, or a Dayjs/Moment/Luxon value
+ * -> `Temporal.Instant`. Rejects strings without a timezone, like "2026-11-07T14:30".
  */
 export function yupInstant() {
-  return temporalSchema<Temporal.Instant>("instant", isInstant, instant, 'an ISO 8601 date-time with "Z" or an offset');
+  return temporalSchema<Temporal.Instant>(
+    "instant",
+    isInstant,
+    (value) => instant(value as InstantInput),
+    'an ISO 8601 date-time with "Z" or an offset',
+  );
 }
 
 /**
- * A "YYYY-MM-DD" string -> `Temporal.PlainDate`.
- * Rejects timestamps like "2026-11-06T18:30:00Z", which is how most day-shift bugs arrive.
+ * A "YYYY-MM-DD" string, a date picker's Date, or a Dayjs/Moment/Luxon value
+ * -> `Temporal.PlainDate`. Rejects timestamps like "2026-11-06T18:30:00Z", which is how
+ * most day-shift bugs arrive.
  */
 export function yupPlainDate() {
-  return temporalSchema<Temporal.PlainDate>("plainDate", isPlainDate, plainDate, 'a calendar date in "YYYY-MM-DD" format');
+  return temporalSchema<Temporal.PlainDate>(
+    "plainDate",
+    isPlainDate,
+    (value) => plainDate(value as PlainDateInput),
+    'a calendar date in "YYYY-MM-DD" format',
+  );
 }

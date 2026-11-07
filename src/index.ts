@@ -9,6 +9,8 @@ export {
   toDate,
   type InstantInput,
   type PlainDateInput,
+  type DateLibraryValue,
+  type CalendarLibraryValue,
 } from "./core.js";
 export {
   formatInstant,
@@ -19,7 +21,7 @@ export {
   type FormatDateOptions,
   type FormatRelativeOptions,
 } from "./format.js";
-export { fromDateInput, toDateInput, fromDateTimeInput, toDateTimeInput } from "./input.js";
+export { fromDateInput, toDateInput, fromDateTimeInput, toDateTimeInput, toPickerDate } from "./input.js";
 export {
   configure,
   DateBridgeError,
